@@ -1,0 +1,734 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { loginUser, registerUser } from '../service/api';
+import { useUser } from '../contexts/userContext';
+import ModalLogin from './ModalLogin';
+import Modal from './Modal';
+import './Login.css';
+import logo from '../assets/logo.jpeg'
+import Mapa from '../assets/Mapa.jpg'
+import Personas from '../assets/Personas.jpg'
+import Recuperar from "./Recuperar";
+
+const Login = () => {
+  const { setUser } = useUser();
+  const [loading, setLoading] = useState(false);
+  const [credentials, setCredentials] = useState({
+    nombreUsuario: '',
+    contrasenia: ''
+  });
+  const [formValues, setFormValues] = useState({
+    nombreRegistro: '',
+    apellido: '',
+    nombreUsuarioRegistro: '',
+    correoElectronicoRegistro: '',
+    contrasenaRegistro: '',
+    confirmarContrasena: ''
+  });
+  const [error, setError] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpenR, setIsModalOpenR] = useState(false);
+  const [modalActions, setModalActions] = useState([]);
+  const navigate = useNavigate();
+  const [attempts, setAttempts] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isFormValid, setIsFormValid] = useState(false);
+  const [message, setMessage] = useState('');
+  const [isRecuperarOpen, setRecuperarOpen] = useState(false);
+
+  useEffect(() => {
+    const allFieldsFilled = Object.values(formValues).every(value => value.trim() !== '');
+    setIsFormValid(allFieldsFilled);
+  }, [formValues]);
+
+  useEffect(() => {
+    const container = document.getElementById('contenedor-LG-R');
+    const registerBtn = document.getElementById('registrarse');
+    const loginBtn = document.getElementById('iniciar-sesion');
+    if (registerBtn && loginBtn && container) {
+      registerBtn.addEventListener('click', () => {
+        container.classList.add("active");
+      });
+      loginBtn.addEventListener('click', () => {
+        container.classList.remove("active");
+      });
+    }
+  },
+    []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setCredentials((prevCredentials) => (
+      { ...prevCredentials, [name]: value }
+    ));
+  };
+
+  const handleChangeRegistro = (e) => {
+    const { name, value } = e.target;
+    setFormValues((prevFormValues) => (
+      { ...prevFormValues, [name]: value }
+    ));
+  };
+
+  const validateUsername = (username) => {
+    const usernameRegex = /^[A-Za-z0-9]+$/;
+    return usernameRegex.test(username);
+  };
+
+  const validatePassword = (password) => {
+    const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+    return passwordRegex.test(password);
+  };
+
+  const handleSubmitRegistro = async (e) => {
+    e.preventDefault();
+
+    const { nombreUsuarioRegistro, contrasenaRegistro, confirmarContrasena } = formValues;
+
+    if (!validateUsername(nombreUsuarioRegistro)) {
+      setMessage('El nombre de usuario solo debe contener letras y números, sin espacios');
+      setModalActions([{ label: 'Cerrar', onClick: () => setIsModalOpenR(false) }]);
+      setIsModalOpenR(true);
+      return;
+    }
+
+    if (contrasenaRegistro !== confirmarContrasena) {
+      setMessage('Las contraseñas no coinciden');
+      setModalActions([{ label: 'Cerrar', onClick: () => setIsModalOpenR(false) }]);
+      setIsModalOpenR(true);
+      return;
+    }
+
+    if (!validatePassword(contrasenaRegistro)) {
+      setMessage('La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial');
+      setModalActions([{ label: 'Cerrar', onClick: () => setIsModalOpenR(false) }]);
+      setIsModalOpenR(true);
+      return;
+    }
+
+    try {
+      const usuarioCreado = await registerUser(
+        nombreUsuarioRegistro,
+        formValues.nombreRegistro,
+        formValues.apellido,
+        formValues.correoElectronico,
+        contrasenaRegistro
+      );
+      setMessage(usuarioCreado.response.data.message);
+      setIsModalOpenR(true);
+      if( usuarioCreado.response.data.message == 'Usuario creado exitosamente'){
+        setModalActions([{ label: '¡Bienvenido!', onClick: () => setIsModalOpenR(false) }]);
+        setFormValues({
+          nombreUsuarioRegistro: '',
+          nombreRegistro: '',
+          apellido: '',
+          correoElectronico: '',
+          contrasenaRegistro: '',
+          confirmarContrasena: ''
+        });
+      }else{
+        setModalActions([{ label: 'Cerrar', onClick: () => setIsModalOpenR(false) }]);
+      }
+  
+    } catch (error) {
+      if (error.response) {
+        if (error.response.data.message === 'usuario') {
+          setMessage('El usuario ya existe con este nombre de usuario');
+        } else if (error.response.data.message === 'correo') {
+          setMessage('El correo electrónico ya está registrado');
+        } else {
+          setMessage('Error al crear la cuenta');
+        }
+      } else {
+        setMessage('Error al crear la cuenta');
+      }
+    }
+  };
+
+
+  const handleSubmit = async (e) => {
+    setLoading(true);
+    e.preventDefault();
+    try {
+      const responseUsuario = await loginUser(credentials.nombreUsuario, credentials.contrasenia);
+      const usuario = responseUsuario.response.data;
+
+      console.log('Respuesta del login', responseUsuario);
+      if (responseUsuario.response.status === 200) {
+        setUser(usuario);
+        alert('Usuario Logeado con exito');
+        if (loading) return <div>Cargando...</div>;
+        navigate('/');
+      } else {
+        setError(responseUsuario.response.data.message);
+        setIsModalOpen(true);
+        setAttempts(prevAttempts => {
+          const newAttempts = prevAttempts + 1;
+          if (newAttempts >= 4) {
+            alert("Demasiados intentos fallidos.");
+            navigate('/');
+          }
+          return newAttempts;
+        });
+      }
+
+    } catch (error) {
+      setError(error.response.data.message || 'Error en la conexión');
+      setIsModalOpen(true);
+      setAttempts(prevAttempts => {
+        const newAttempts = prevAttempts + 1;
+        if (newAttempts >= 4) {
+          alert("Demasiados intentos fallidos.");
+          navigate('/');
+        }
+        return newAttempts;
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleRecuperar = () => {
+    setRecuperarOpen(!isRecuperarOpen);
+  };
+
+  const closeModal = () => {setIsModalOpen(false); };
+  const closeModalR = () => {setIsModalOpenR(false); };
+
+  const togglePasswordVisibility = (type) => {
+    if (type === 'password') {
+      setShowPassword(!showPassword);
+    } else if (type === 'confirmPassword') {
+      setShowConfirmPassword(!showConfirmPassword);
+    }
+  };
+
+  const togglePasswordVisualizar = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const handleCancelClick = () => {
+    setMessage('¿Seguro que quiere cancelar?');
+    setModalActions([
+      {
+        label: 'Sí',
+        onClick: () => {
+          setFormValues({
+            nombreUsuario: '',
+            nombre: '',
+            apellido: '',
+            correoElectronico: '',
+            contrasena: '',
+            confirmarContrasena: ''
+          });
+          setIsModalOpen(false);
+          navigate('/');
+        }
+      },
+      { label: 'No', onClick: () => setIsModalOpen(false) }
+    ]);
+    setIsModalOpen(true);
+  };
+
+  return (
+    <>
+      <div className="Navbar-login" style={{ backgroundColor: '#001745' }}>
+        <div className="logo-nombre-login">
+          <button className="logo-button-login" onClick={() => navigate('/')}>
+            <div className="logo-login">
+              <img src={logo} className="img-logo-login" alt="portada" />
+            </div>
+          </button>
+          <div className="nombre-app-login">
+            <h3>HistoryHouse</h3>
+          </div>
+        </div>
+      </div>
+      <div className="flecha-Login" >
+        <div className='row'>
+          <i className="bi bi-arrow-left" id="Login-flecha" onClick={() => navigate('/')}></i>
+        </div>
+      </div>
+      <div className='cuerpo'>
+        <div className='contenedor-LG-R' id="contenedor-LG-R">
+          <div className='contenedor-formulario registro'>
+            <form onSubmit={handleSubmitRegistro}>
+              <h1>Registro</h1>
+              <input
+                type="text"
+                placeholder='Nombre'
+                name="nombreRegistro"
+                maxLength="30"
+                value={formValues.nombreRegistro}
+                onChange={handleChangeRegistro}
+                required
+              />
+              <input
+                type="text"
+                placeholder='Apellido'
+                name="apellido"
+                maxLength="30"
+                value={formValues.apellido}
+                onChange={handleChangeRegistro}
+                required
+              />
+              <input
+                type="text"
+                placeholder='Nombre de Usuario'
+                name="nombreUsuarioRegistro"
+                maxLength="40"
+                value={formValues.nombreUsuarioRegistro}
+                onChange={handleChangeRegistro}
+                required
+              />
+              <input
+                type="email"
+                placeholder='Correo Electronico'
+                name="correoElectronico"
+                maxLength="40"
+                value={formValues.correoElectronico}
+                onChange={handleChangeRegistro}
+                required
+              />
+              <div className="input-container">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder='Contraseña'
+                  name="contrasenaRegistro"
+                  maxLength="20"
+                  value={formValues.contrasenaRegistro}
+                  onChange={handleChangeRegistro}
+                  required
+                />
+                <i
+                  className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`}
+                  id="ojoRegistro"
+                  onClick={() => togglePasswordVisibility('password')}
+                  style={{ cursor: 'pointer' }}
+                ></i>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder='Confirmar Contraseña'
+                  name="confirmarContrasena"
+                  maxLength="20"
+                  value={formValues.confirmarContrasena}
+                  onChange={handleChangeRegistro}
+                  required
+                />
+                <i className={`bi ${showConfirmPassword ? 'bi-eye-slash' : 'bi-eye'}`}
+                  id="ojitoConfirm"
+                  onClick={() => togglePasswordVisibility('confirmPassword')}
+                  style={{ cursor: 'pointer' }}
+                ></i>
+              </div>
+              <button>Registrarse</button>
+            </form>
+          </div>
+
+          <div className='contenedor-formulario inicio-sesion'>
+            <form onSubmit={handleSubmit}>
+              <h1>Iniciar sesión</h1>
+              <input
+                type="text"
+                name="nombreUsuario"
+                placeholder="Usuario"
+                maxLength="30"
+                value={credentials.nombreUsuario} onChange={handleChange}
+                require />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Contraseña" name="contrasenia"
+                maxLength="30"
+                value={credentials.contrasenia} onChange={handleChange} required />
+              <div>
+                <i
+                  className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`}
+                  id="ojo"
+                  onClick={togglePasswordVisualizar}
+                />
+              </div>
+              <a href="#" onClick={toggleRecuperar}>¿Olvidaste tu contraseña?</a>
+              <button>Iniciar sesión</button>
+            </form>
+          </div>
+          <div className="contenedor-toggle">
+            <div className="toggle">
+              <div className="panel-toggle panel-izquierda">
+                <img src={Mapa} className="imagen-panel-inicio" alt="portada" />
+                <h1>¿Eres nuev@?</h1>
+                <button className="oculto" id="iniciar-sesion">Inicia sesión</button>
+              </div>
+              <div className="panel-toggle panel-derecha">
+                <img src={Personas} className="imagen-panel-registro" alt="portada" />
+                <h1>¡Bienvenid@ de vuelta!</h1>
+                <button className="oculto" id="registrarse">Registrate</button>
+              </div>
+            </div>
+          </div>
+        </div >
+      </div >
+      {isRecuperarOpen && (
+        <Recuperar isOpen={isRecuperarOpen} onClose={toggleRecuperar} />
+      )}
+      {isModalOpenR && (
+        <Modal
+          show={isModalOpenR}
+          onClose={closeModalR}
+          message={message}
+          actions={modalActions}
+        />
+      )}
+      {error && <ModalLogin isOpen={isModalOpen} onClose={closeModal} message={error} />}
+    </>
+  );
+};
+export default Login;
+
+
+
+------------------------------------------------------------------------------------------------------
+.Navbar-login {
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    background-color: #001745;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    height: 100%;
+    padding-top: 10px;
+    max-height: 70px;
+    z-index: 1050;
+}
+
+.logo-nombre-login {
+    display: flex;
+    width: 100%;
+    max-width: 310px;
+    align-items: center;
+}
+
+.logo-button-login {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    /* Elimina el padding por defecto del botón */
+}
+
+.logo-login {
+    margin-right: 10px;
+}
+
+.img-logo-login {
+    width: 100%;
+    max-width: 40px;
+    max-height: 35px;
+    background-size: cover;
+    border-radius: 50%;
+    margin: 0 auto;
+}
+
+.nombre-app-login {
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+    display: flex;
+}
+
+.nombre-app-login h3 {
+    font-size: 2rem;
+    text-align: center;
+    width: 100%;
+    white-space: nowrap;
+}
+
+/*-----------------------------------------------------------*/
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.cuerpo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    height: 100%;
+    max-width: 100%;
+}
+
+.flecha-Login {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 5px;
+    padding-left: 60px;
+    padding-top: 10px;
+}
+
+#Login-flecha {
+    font-size: 1.5rem;
+    cursor: pointer;
+    left: 50%;
+    padding-left: 30%;
+}
+
+.contenedor-LG-R {
+    background-color: #BFBFCA;
+    border-radius: 30px;
+    position: relative;
+    overflow: hidden;
+    width: 768px;
+    max-width: 100%;
+    min-height: 580px;
+}
+
+.contenedor-LG-R p {
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: 0.3px;
+    margin: 20px 0;
+}
+
+.contenedor-LG-R span {
+    font-size: 12px;
+}
+
+.contenedor-LG-R a {
+    color: #333;
+    font-size: 13px;
+    text-decoration: none;
+    margin: 15px 0 10px;
+}
+
+.contenedor-LG-R a:hover {
+    color: #404F72;
+}
+
+.contenedor-LG-R button {
+    background-color: #20335C;
+    color: #fff;
+    font-size: 12px;
+    padding: 10px 45px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-top: 10px;
+    cursor: pointer;
+}
+
+.contenedor-LG-R button:hover {
+    background-color: #7F879E;
+    transform: translateY(-2px);
+}
+
+.contenedor-LG-R button.hidden {
+    background-color: transparent;
+    border-color: #fff;
+}
+
+.contenedor-LG-R form {
+    background-color: #BFBFCA;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 0 40px;
+    height: 100%;
+    max-height: 1000px;
+}
+
+.contenedor-LG-R input {
+    background-color: #eee;
+    border: none;
+    margin: 8px 0;
+    padding: 10px 15px;
+    font-size: 13px;
+    border-radius: 8px;
+    width: 100%;
+    outline: none;
+}
+
+.contenedor-formulario {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    transition: all 0.6s ease-in-out;
+}
+
+.inicio-sesion {
+    left: 0;
+    width: 50%;
+    z-index: 2;
+}
+
+.contenedor-LG-R.active .inicio-sesion {
+    transform: translateX(100%);
+}
+
+.registro {
+    left: 0;
+    width: 50%;
+    opacity: 0;
+    z-index: 1;
+}
+
+.contenedor-LG-R.active .registro {
+    transform: translateX(100%);
+    opacity: 1;
+    z-index: 5;
+    animation: move 0.6s;
+}
+
+@keyframes move {
+
+    0%,
+    49.99% {
+        opacity: 0;
+        z-index: 1;
+    }
+
+    50%,
+    100% {
+        opacity: 1;
+        z-index: 5;
+    }
+}
+
+.contenedor-toggle {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 50%;
+    height: 100%;
+    overflow: hidden;
+    transition: all 0.6s ease-in-out;
+    border-radius: 150px 0 0 100px;
+    z-index: 1000;
+}
+
+.contenedor-LG-R.active .contenedor-toggle {
+    transform: translateX(-100%);
+    border-radius: 0 150px 100px 0;
+}
+
+.toggle {
+    background-color: #001745;
+    height: 100%;
+    position: relative;
+    left: -100%;
+    height: 100%;
+    width: 200%;
+    transform: translateX(0);
+    transition: all 0.6s ease-in-out;
+}
+
+.contenedor-LG-R.active .toggle {
+    transform: translateX(50%);
+}
+
+.panel-toggle {
+    position: absolute;
+    width: 50%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
+    top: s0;
+    transform: translateX(0);
+    transition: all 0.6s ease-in-out;
+}
+
+.panel-izquierda {
+    transform: translateX(-200%);
+}
+
+.contenedor-LG-R.active .panel-izquierda {
+    transform: translateX(0);
+    color: #FEF7F6;
+}
+
+.panel-derecha {
+    right: 0;
+    transform: translateX(0);
+    color: #FEF7F6;
+}
+
+.contenedor-LG-R.active .panel-derecha {
+    transform: translateX(200%);
+    color: #FEF7F6;
+}
+
+#ojo {
+    position: absolute;
+    top: 52.3%;
+    right: 50px;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #aaa;
+}
+
+.input-container {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.input-container input {
+    width: 100%;
+    padding-right: 40px;
+    box-sizing: border-box;
+}
+
+.input-container #ojoRegistro {
+    position: absolute;
+    top: 25%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-size: 1.2rem;
+    color: #888;
+    cursor: pointer;
+}
+
+.input-container #ojitoConfirm {
+    position: absolute;
+    top: 75%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-size: 1.2rem;
+    color: #888;
+    cursor: pointer;
+}
+
+.imagen-panel-inicio {
+    width: 200px;
+    /* Ajusta el tamaño según sea necesario */
+    height: 200px;
+    /* Mantén la proporción de la imagen */
+    margin-bottom: 20px;
+    /* Añade espacio entre la imagen y el texto */
+    border-radius: 10px;
+    /* Opcional: redondea los bordes */
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    /* Opcional: añade sombra */
+}
+
+.imagen-panel-registro {
+    width: 200px;
+    /* Ajusta el tamaño según sea necesario */
+    height: 200px;
+    /* Mantén la proporción de la imagen */
+    margin-bottom: 20px;
+    /* Añade espacio entre la imagen y el texto */
+    border-radius: 10px;
+    /* Opcional: redondea los bordes */
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    /* Opcional: añade sombra */
+}

@@ -1,0 +1,6 @@
+#JSGF V1.0;
+
+grammar programas;
+
+public <programa> = triangulo | circulo | rectangulo | deshacer | rehacer | salir;
+ 
